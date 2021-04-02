@@ -109,7 +109,8 @@ func main() {
 		port = defaultPort
 	}
 	addr := fmt.Sprintf(":%v", port)
-	fmt.Printf("listening: http://localhost%s\n", addr)
+	url := fmt.Sprintf("http://localhost%s", addr)
+	fmt.Printf("listening: %s\n", url)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
 	}
