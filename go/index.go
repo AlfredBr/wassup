@@ -111,7 +111,5 @@ func main() {
 	addr := fmt.Sprintf(":%v", port)
 	url := fmt.Sprintf("http://localhost%s", addr)
 	fmt.Printf("listening: %s\n", url)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
