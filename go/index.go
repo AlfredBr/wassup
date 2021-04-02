@@ -22,7 +22,6 @@ const defaultPort = 3000
 
 var userSymbols map[string]string
 var symbolIndex = 0
-var symbols = []string{"🔴", "🟡", "🟢", "🟣", "🔵", "🟠", "🟤", "⚪️"}
 var userMessages []UserMessage
 
 type UserMessage struct {
@@ -51,7 +50,8 @@ func getUserId(w http.ResponseWriter, r *http.Request) string {
 	return userId
 }
 func getUserSymbol(userId string) string {
-	var symbol = userSymbols[userId]
+	symbols := []string{"🔴", "🟡", "🟢", "🟣", "🔵", "🟠", "🟤", "⚪️"}
+	symbol := userSymbols[userId]
 	if symbol == "" {
 		symbol = symbols[symbolIndex%len(symbols)]
 		userSymbols[userId] = symbol
