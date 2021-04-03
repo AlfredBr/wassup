@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <title class="title">wassup</title>
     <!-- <link rel="manifest" href="manifest.json" /> -->
     <link rel="shortcut icon" href="favicon.ico" />
@@ -127,7 +128,8 @@
         }
     };
     const clientResize = function () {
-        $(".messages").height(Math.min(896, $(window).height() - 95));
+        var offset = iPhone ? 105 : 95;
+        $(".messages").height(Math.min(896, $(window).height() - offset));
     };
     const main = function () {
         const title = "wassup.js";
@@ -139,6 +141,7 @@
     socket.on("broadcast", () => { ajaxPost(); });
     $("button").click(sendMessage);
     $("button").addClass(win32 ? "lifted" : "");
+    $(".entry").addClass(iPhone ? "lifted" : "");
     $("#user-input").on("keydown", sendMessage);
     $(window).resize(clientResize);
     $(main);
