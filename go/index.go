@@ -9,11 +9,13 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/pkg/math"
 )
 
 // https://blog.golang.org/json
 // https://github.com/gorilla/websocket/blob/master/examples/chat/main.go // golang example
+// https://github.com/googollee/go-socket.io
 // https://scene-si.org/2017/09/27/things-to-know-about-http-in-go/
 // https://dev.to/bcanseco/request-body-encoding-json-x-www-form-urlencoded-ad9
 
@@ -28,6 +30,11 @@ type UserMessage struct {
 	UserId  string `json:"userId"`
 	Message string `json:"message"`
 	Symbol  string `json:"symbol"`
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 func fileHandler(file string) func(http.ResponseWriter, *http.Request) {
@@ -95,11 +102,23 @@ func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(json)
 	}
 }
-
+func websocketHandler(w http.ResponseWriter, r *http.Request) {
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Client Connected")
+	err = ws.WriteMessage(1, []byte("broadcast"))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 func main() {
 	http.HandleFunc("/", fileHandler("index.html"))
 	http.HandleFunc("/index.css", fileHandler("index.css"))
 	http.HandleFunc("/UserMessage", userMessageHandler)
+	http.HandleFunc("/ws", websocketHandler)
 
 	userSymbols = make(map[string]string)
 
