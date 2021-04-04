@@ -18,7 +18,7 @@
             <div class="title">wassup</div>
             <div class="messages"></div>
             <div class="entry">
-                <input id="user-input" type="text" placeholder="message">
+                <input type="text" placeholder="message">
                 <button type="button">👊🏾</button>
             </div>
         </div>
@@ -84,16 +84,16 @@
                         writeLine(item);
                     }
                     $(".messages").children().last()[0]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-                    $("#user-input").css("background-color", "white");
+                    $("input").css("background-color", "white");
                 }
                 callback?.();
             },
             error: function (error) {
-                $("#user-input")
+                $("input")
                     .prop("disabled", true)
                     .addClass("input-error")
                     .on("animationend", function () {
-                        $("#user-input")
+                        $("input")
                             .prop("disabled", false)
                             .removeClass("input-error")
                             .css("background-color", "lightyellow")
@@ -107,22 +107,22 @@
     const iPhone = /^(iPhone)/.test(navigator.platform);
     const iPad = /^(iPad)/.test(navigator.platform);
     const win32 = /^(Win32)/.test(navigator.platform);
-    const enterKey = 13;
     const sendMessage = function (e) {
-        const userInput = $("#user-input").val();
+        const enterKey = 13;
+        const userInput = $("input").val();
         if (userInput.length > 0) {
             if (e.keyCode === enterKey) {
                 console.log(`keydown: Enter, user-input: '${userInput}'`);
                 ajaxPost(userInput, false, function () {
-                    $("#user-input").val("");
+                    $("input").val("");
                     if (iOS) {
-                        $("#user-input").blur();
+                        $("input").blur();
                     }
                 });
             } else if (e.target.type === "button") {
                 console.log(`button: Click, user-input: '${userInput}'`);
                 ajaxPost(userInput, false, function () {
-                    $("#user-input").val("").blur();
+                    $("input").val("").blur();
                 });
             }
         }
@@ -136,7 +136,7 @@
         const title = "wassup.js";
         $(".title").empty().append(title);
         ajaxPost();
-        $("#user-input").focus();
+        $("input").focus();
         clientResize();
     };
     socket.on("broadcast", () => { ajaxPost(); });
@@ -144,7 +144,7 @@
     $("button").addClass(win32 ? "lifted" : "");
     $("main").addClass(win32 ? "win32" : "");
     $(".entry").addClass(iPhone && window.navigator.standalone ? "lifted" : "");
-    $("#user-input").on("keydown", sendMessage);
+    $("input").on("keydown", sendMessage);
     $(window).resize(clientResize);
     $(main);
 </script>

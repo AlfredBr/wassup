@@ -13,6 +13,19 @@ main.win32 {
     max-width: 640px; 
 }
 
+button {
+    background-color: #2471A3;
+    border: 0;
+    padding: 0;
+    width: 48px;
+    font-size: 32px;
+    padding-right: 10px;
+}
+
+button:focus {
+    outline:0;
+}
+
 div.title {
     position:relative;
     top: 0;
@@ -61,6 +74,10 @@ input {
     border: 0;
 }
 
+.lifted {
+    padding-bottom: 10px;
+}
+
 .input-error {    
     animation-name: input-error-animation;
     animation-duration: 0.1s;
@@ -79,21 +96,4 @@ input {
         margin-left: 8px;
         margin-right: 12px;
     }
-}
-
-button {
-    background-color: #2471A3;
-    border: 0;
-    padding: 0;
-    width: 48px;
-    font-size: 32px;
-    padding-right: 10px;
-}
-
-.lifted {
-    padding-bottom: 10px;
-}
-
-button:focus {
-    outline:0;
 }
