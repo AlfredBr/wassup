@@ -5,9 +5,12 @@
     margin: 0;
 }
 
-main {
-    max-width: 640px; 
+main {    
     margin: auto;
+}
+
+main.win32 {
+    max-width: 640px; 
 }
 
 div.title {

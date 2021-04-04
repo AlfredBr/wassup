@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/1fd064ee-4abf-4738-bfd4-8d22124e5b38/resourceGroups/BC21CD7D-B1B0-4CF1-8FC8-388CC43E5BC5/providers/Microsoft.Web/sites/wassup",
+    "appService.deploySubpath": "js"
+}

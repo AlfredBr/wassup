@@ -129,6 +129,7 @@
     };
     const clientResize = function () {
         var offset = iPhone && window.navigator.standalone ? 105 : 95;
+        console.log(`screen.availHeight=${screen.availHeight}, $(window).height()=${$(window).height()}`)
         $(".messages").height(Math.min(896, $(window).height() - offset));
     };
     const main = function () {
@@ -141,6 +142,7 @@
     socket.on("broadcast", () => { ajaxPost(); });
     $("button").click(sendMessage);
     $("button").addClass(win32 ? "lifted" : "");
+    $("main").addClass(win32 ? "win32" : "");
     $(".entry").addClass(iPhone && window.navigator.standalone ? "lifted" : "");
     $("#user-input").on("keydown", sendMessage);
     $(window).resize(clientResize);
