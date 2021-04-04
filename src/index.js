@@ -36,15 +36,56 @@ const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 const cookieParser = require('cookie-parser');
 const users = [];
-const symbols = ["🔴", "🟡", "🟢", "🟣", "🔵", "🟠", "🟤", "⚪️"];
 var messages = [];
 
 io.on("connection", (socket) => {
-    console.log(`connection: socket=${socket.id}`);
+    //console.log(`connection: socket=${socket.id}`);
     socket.on('disconnect', () => {
         console.log(`disconnect: socket=${socket.id}`);
     });
 });
+
+var getUserId = function(req, res) {
+    var userId = "";
+    if (!!req.cookies.userId) {
+        userId = req.cookies.userId;
+    }
+    else {
+        userId = uuid.v4();
+        res.cookie("userId", userId);
+    }
+    if (users.indexOf(userId) === -1) {
+        users.push(userId);
+    }
+    //console.log(`getUserId() returns '${userId}'`)
+    return userId;
+};
+
+var getUserSymbol = function(req, res) {
+    var userSymbol = "";
+    if (!!req.cookies.userSymbol)
+    {    
+        userSymbol = req.cookies.userSymbol;
+    }
+    else {
+        const userId = getUserId(req, res);
+        const symbols = ["🔴", "🟡", "🟢", "🟣", "🔵", "🟠", "🟤", "⚪️"];
+        var i = users.indexOf(userId);
+        userSymbol = symbols[i % symbols.length];
+        res.cookie("userSymbol", userSymbol);
+    }
+    //console.log(`getUserSymbol() returns '${userSymbol}'`)
+    return userSymbol;
+};
+
+var getUserMessage = function(req, res) {
+    var userMessage = "";
+    if (req.body.message?.length > 0) {
+        userMessage = req.body.message;
+    }    
+    //console.log(`getUserMessage() returns '${userMessage}'`)
+    return userMessage;
+};
 
 app.use(express.json());
 app.use(express.urlencoded({
@@ -57,42 +98,49 @@ app.get('/', (req, res) => {
     console.log(`root: ${req.cookies.userId}`);
 });
 app.post('/UserMessage', (req, res) => {
-    if (!req.body.userId || !req.cookies.userId) {
-        req.body.userId = uuid.v4();
-    } else {
-        req.body.userId == req.cookies.userId;
-    }
-    res.cookie("userId", req.body.userId);
-    console.log("post: /UserMessage " + JSON.stringify(req.body));
-    if (users.indexOf(req.body.userId) === -1) {
-        users.push(req.body.userId);
-    }
-    if (req.body.message?.length > 0) {
+    const userId = getUserId(req, res);
+    const userSymbol = getUserSymbol(req, res);
+    const userMessage = getUserMessage(req, res);
+    
+    if (userMessage?.length > 0) {
         const timespan = (((new Date()).getTime()) - req.cookies.userDate);
         const cooldown = req.cookies.userDate ? timespan >= 1000 : true;
         if (!cooldown) {
-            const errMsg = `fail: no cooldown because previous message was ${timespan}ms ago`;
+            const errMsg = `forbidden: no cooldown because previous message was ${timespan}ms ago`;
             console.log(errMsg);
             res.status(403).send(errMsg);
             return;
         }
-        const unique = req.cookies.userMessage !== req.body.message;
+        const unique = req.cookies.userMessage !== userMessage;
         if (!unique) {
-            const errMsg = `fail: not unique because '${req.cookies.userMessage}' === '${req.body.message}'`;
+            const errMsg = `forbidden: not unique because '${req.cookies.userMessage}' = '${req.body.message}'`;
             console.log(errMsg);
             res.status(403).send(errMsg);
             return;
         }
-        if (req.body.message.toLowerCase().indexOf("/n") >= 0) {
-            res.cookie("userName", req.body.message.substring(2).trim());
+        if (req.body.message.toLowerCase().indexOf("/n") == 0) {
+            res.cookie("userSymbol", req.body.message.substring(2).trim());
+            res.send("");
+            return;
+        }      
+        if (req.body.message.toLowerCase().indexOf("/info") == 0) {
+            console.log(`/info userId=${userId}, userSymbol=${userSymbol}`);
+            res.send("");
+            return;
+        }      
+        if (req.body.message.toLowerCase().indexOf("/") == 0) {
             res.send("");
             return;
         }
-        res.cookie("userMessage", req.body.message);
+        res.cookie("userMessage", userMessage);
         res.cookie("userDate", (new Date()).getTime());
-        var i = users.indexOf(req.body.userId);
-        req.body.symbol = req.cookies.userName || symbols[i % symbols.length];
-        messages.push(req.body);
+        const userMessageOut = {
+            userId: userId,
+            message: userMessage,
+            symbol: userSymbol
+        };
+        console.log(`/UserMessage ${JSON.stringify(userMessageOut)}`)
+        messages.push(userMessageOut);
         io.sockets.emit("broadcast");
     }
     messages = messages.slice(-8);

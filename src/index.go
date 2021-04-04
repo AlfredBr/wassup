@@ -48,10 +48,11 @@ func getUserId(w http.ResponseWriter, r *http.Request) string {
 		return cookieIn.Value
 	}
 	userId := uuid.New().String()
+	oneMonth := 60 * 60 * 24 * 30
 	cookieOut := http.Cookie{
 		Name:   "userId",
 		Value:  userId,
-		MaxAge: 3600,
+		MaxAge: oneMonth,
 	}
 	http.SetCookie(w, &cookieOut)
 	return userId
@@ -79,11 +80,11 @@ func getUserMessage(w http.ResponseWriter, r *http.Request) string {
 }
 func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, "Method is not supported.", http.StatusNotFound)
+		http.Error(w, "403 not suported", http.StatusForbidden)
 		return
 	}
 	if r.URL.Path != "/UserMessage" {
-		http.Error(w, "404 not found.", http.StatusNotFound)
+		http.Error(w, "404 not found", http.StatusNotFound)
 		return
 	}
 
