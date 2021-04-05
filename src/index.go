@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -21,6 +22,7 @@ import (
 
 const maxMsgs = 8
 const defaultPort = 3000
+const oneMonth = 60 * 60 * 24 * 30
 
 var userSymbols map[string]string
 var symbolIndex = 0
@@ -48,7 +50,6 @@ func getUserId(w http.ResponseWriter, r *http.Request) string {
 		return cookieIn.Value
 	}
 	userId := uuid.New().String()
-	oneMonth := 60 * 60 * 24 * 30
 	cookieOut := http.Cookie{
 		Name:   "userId",
 		Value:  userId,
@@ -78,6 +79,46 @@ func getUserMessage(w http.ResponseWriter, r *http.Request) string {
 	}
 	return userMessage.Message
 }
+func setCookie(w http.ResponseWriter, r *http.Request, name string, value string) {
+	cookie := http.Cookie{
+		Name:   name,
+		Value:  value,
+		MaxAge: oneMonth,
+	}
+	http.SetCookie(w, &cookie)
+}
+func cooldownTest(w http.ResponseWriter, r *http.Request) bool {
+	now := time.Now().Unix()
+	var then int64
+	if cookie, err := r.Cookie("userDate"); err == nil {
+		if then, err = strconv.ParseInt(cookie.Value, 10, 64); err != nil {
+			return false
+		}
+	}
+	cooldown := (now - then) > 1
+	return cooldown
+}
+func cooldownError(w http.ResponseWriter, r *http.Request) {
+	const errMsg = "403 forbidden: cooldown failed"
+	log.Println(errMsg)
+	http.Error(w, errMsg, http.StatusForbidden)
+}
+func uniquenessTest(w http.ResponseWriter, r *http.Request) bool {
+	userMessage := getUserMessage(w, r)
+	if cookie, err := r.Cookie("userMessage"); err == nil {
+		return cookie.Value != userMessage
+	}
+	return false
+}
+func uniquenessError(w http.ResponseWriter, r *http.Request) {
+	userMessage := getUserMessage(w, r)
+	cookie, err := r.Cookie("userMessage")
+	if err == nil {
+		errMsg := fmt.Sprintf("403 forbidden: message not unique because '%s' = '%s'", cookie.Value, userMessage)
+		log.Println(errMsg)
+		http.Error(w, errMsg, http.StatusForbidden)
+	}
+}
 func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "403 not suported", http.StatusForbidden)
@@ -88,21 +129,31 @@ func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userDate := fmt.Sprintf("%v", time.Now().Unix())
 	userMessage := getUserMessage(w, r)
 	if len(userMessage) > 0 {
-		// todo: cooldown test
-		// todo: unique test
+		if !cooldownTest(w, r) {
+			cooldownError(w, r)
+			return
+		}
+		if !uniquenessTest(w, r) {
+			uniquenessError(w, r)
+			return
+		}
+		// todo: clear command
+		// todo: custom symbol command
+		// todo: info command
 		userId := getUserId(w, r)
 		userSymbol := getUserSymbol(userId)
+		setCookie(w, r, "userDate", userDate)
+		setCookie(w, r, "userMessage", userMessage)
 		userMessageOut := UserMessage{userId, userMessage, userSymbol}
 		fmt.Printf("/UserMessage: %+v\n", userMessageOut)
 		userMessages = append(userMessages, userMessageOut)
-		// todo: send broadcast message
+		// todo: send broadcast message via websocket
 	}
-	// todo: set date
-	// todo: set usermessage
-	userMessages = userMessages[math.Max(0, len(userMessages)-maxMsgs):]
 
+	userMessages = userMessages[math.Max(0, len(userMessages)-maxMsgs):]
 	if json, err := json.Marshal(userMessages); err == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(json)
@@ -135,6 +186,6 @@ func main() {
 	}
 	addr := fmt.Sprintf(":%v", port)
 	url := fmt.Sprintf("http://localhost%s", addr)
-	fmt.Printf("listening: %s\n", url)
+	log.Printf("listening: %s\n", url)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

@@ -35,6 +35,7 @@ const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 const cookieParser = require('cookie-parser');
+const maxMsgs = 8;
 const users = [];
 var messages = [];
 
@@ -61,7 +62,7 @@ var cooldownTest = function (req, res, waitTime = 1000) {
     return cooldown;
 };
 var cooldownError = function (req, res) {
-    const errMsg = `forbidden: cooldown failed because previous message was ${timespan}ms ago`;
+    const errMsg = "403 forbidden: cooldown failed";
     console.log(errMsg);
     res.status(403).send(errMsg);
 };
@@ -71,7 +72,7 @@ var uniquenessTest = function (req, res){
     return unique;
 };
 var uniquenessError = function (req, res){
-    const errMsg = `forbidden: not unique because '${req.cookies.userMessage}' = '${req.body.message}'`;
+    const errMsg = `403 forbidden: message not unique because '${req.cookies.userMessage}' = '${req.body.message}'`;
     console.log(errMsg);
     res.status(403).send(errMsg);
 };
@@ -137,10 +138,9 @@ app.get('/', (req, res) => {
     console.log(`root: ${req.cookies.userId}`);
 });
 app.post('/UserMessage', (req, res) => {
+    const userDate = (new Date()).getTime();
     const userMessage = getUserMessage(req, res);
     if (userMessage?.length > 0) {
-        const userId = getUserId(req, res);
-        const userSymbol = getUserSymbol(req, res);        
         if (!cooldownTest(req, res)) {
             cooldownError(req, res);
             return;
@@ -165,10 +165,11 @@ app.post('/UserMessage', (req, res) => {
             // unknown command
             res.send("");
             return;
-        }
-        
+        }        
+        const userId = getUserId(req, res);
+        const userSymbol = getUserSymbol(req, res);        
+        res.cookie("userDate", userDate);
         res.cookie("userMessage", userMessage);
-        res.cookie("userDate", (new Date()).getTime());
         const userMessageOut = {
             userId: userId,
             message: userMessage,
@@ -178,7 +179,8 @@ app.post('/UserMessage', (req, res) => {
         messages.push(userMessageOut);
         io.sockets.emit("broadcast");
     }
-    messages = messages.slice(-8);
+
+    messages = messages.slice(-1 * maxMsgs);
     res.send(messages);
 });
 
