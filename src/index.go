@@ -90,12 +90,17 @@ func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	userMessage := getUserMessage(w, r)
 	if len(userMessage) > 0 {
+		// todo: cooldown test
+		// todo: unique test
 		userId := getUserId(w, r)
 		userSymbol := getUserSymbol(userId)
 		userMessageOut := UserMessage{userId, userMessage, userSymbol}
 		fmt.Printf("/UserMessage: %+v\n", userMessageOut)
 		userMessages = append(userMessages, userMessageOut)
+		// todo: send broadcast message
 	}
+	// todo: set date
+	// todo: set usermessage
 	userMessages = userMessages[math.Max(0, len(userMessages)-maxMsgs):]
 
 	if json, err := json.Marshal(userMessages); err == nil {

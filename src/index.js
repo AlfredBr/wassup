@@ -45,6 +45,36 @@ io.on("connection", (socket) => {
     });
 });
 
+var command = function(req, res, cmd)
+{
+    return req.body.message.toLowerCase().indexOf(cmd) == 0;
+};
+var reset = function(req, res)
+{
+    messages.length = 0;
+    users.length = 0;
+    res.send("");
+};
+var cooldownTest = function (req, res, waitTime = 1000) {
+    const timespan = (((new Date()).getTime()) - req.cookies.userDate);
+    const cooldown = req.cookies.userDate ? timespan >= waitTime : true;
+    return cooldown;
+};
+var cooldownError = function (req, res) {
+    const errMsg = `forbidden: cooldown failed because previous message was ${timespan}ms ago`;
+    console.log(errMsg);
+    res.status(403).send(errMsg);
+};
+var uniquenessTest = function (req, res){
+    const userMessage = getUserMessage(req, res);
+    const unique = req.cookies.userMessage !== userMessage;
+    return unique;
+};
+var uniquenessError = function (req, res){
+    const errMsg = `forbidden: not unique because '${req.cookies.userMessage}' = '${req.body.message}'`;
+    console.log(errMsg);
+    res.status(403).send(errMsg);
+};
 var getUserId = function(req, res) {
     var userId = "";
     if (!!req.cookies.userId) {
@@ -60,7 +90,6 @@ var getUserId = function(req, res) {
     //console.log(`getUserId() returns '${userId}'`)
     return userId;
 };
-
 var getUserSymbol = function(req, res) {
     var userSymbol = "";
     if (!!req.cookies.userSymbol)
@@ -77,7 +106,6 @@ var getUserSymbol = function(req, res) {
     //console.log(`getUserSymbol() returns '${userSymbol}'`)
     return userSymbol;
 };
-
 var getUserMessage = function(req, res) {
     var userMessage = "";
     if (req.body.message?.length > 0) {
@@ -86,6 +114,17 @@ var getUserMessage = function(req, res) {
     //console.log(`getUserMessage() returns '${userMessage}'`)
     return userMessage;
 };
+var setCustomSymbol = function(req, res) {
+    res.cookie("userSymbol", req.body.message.substring(2).trim());
+    res.send("");
+};
+var showUserInfo = function(req, res) {
+    var userId = getUserId(req, res);
+    var userSymbol = getUserSymbol(req, res)
+    var userInfo = `/info userId=${userId}, userSymbol=${userSymbol}`;
+    console.log(userInfo);   
+    res.send("");
+}
 
 app.use(express.json());
 app.use(express.urlencoded({
@@ -98,40 +137,36 @@ app.get('/', (req, res) => {
     console.log(`root: ${req.cookies.userId}`);
 });
 app.post('/UserMessage', (req, res) => {
-    const userId = getUserId(req, res);
-    const userSymbol = getUserSymbol(req, res);
     const userMessage = getUserMessage(req, res);
-    
     if (userMessage?.length > 0) {
-        const timespan = (((new Date()).getTime()) - req.cookies.userDate);
-        const cooldown = req.cookies.userDate ? timespan >= 1000 : true;
-        if (!cooldown) {
-            const errMsg = `forbidden: no cooldown because previous message was ${timespan}ms ago`;
-            console.log(errMsg);
-            res.status(403).send(errMsg);
+        const userId = getUserId(req, res);
+        const userSymbol = getUserSymbol(req, res);        
+        if (!cooldownTest(req, res)) {
+            cooldownError(req, res);
+            return;
+        }        
+        if (!uniquenessTest(req, res)) {
+            uniquenessError(req, res);
             return;
         }
-        const unique = req.cookies.userMessage !== userMessage;
-        if (!unique) {
-            const errMsg = `forbidden: not unique because '${req.cookies.userMessage}' = '${req.body.message}'`;
-            console.log(errMsg);
-            res.status(403).send(errMsg);
-            return;
-        }
-        if (req.body.message.toLowerCase().indexOf("/n") == 0) {
-            res.cookie("userSymbol", req.body.message.substring(2).trim());
-            res.send("");
+        if (command(req, res, "/n")) {
+            setCustomSymbol(req, res);            
             return;
         }      
-        if (req.body.message.toLowerCase().indexOf("/info") == 0) {
-            console.log(`/info userId=${userId}, userSymbol=${userSymbol}`);
-            res.send("");
+        if (command(req, res, "/reset")) {
+            reset(req, res);
             return;
         }      
-        if (req.body.message.toLowerCase().indexOf("/") == 0) {
+        if (command(req, res, "/info")) {
+            showUserInfo(req, res);
+            return;
+        }      
+        if (command(req, res, "/")) {
+            // unknown command
             res.send("");
             return;
         }
+        
         res.cookie("userMessage", userMessage);
         res.cookie("userDate", (new Date()).getTime());
         const userMessageOut = {

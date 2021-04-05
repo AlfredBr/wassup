@@ -129,7 +129,7 @@
     };
     const clientResize = function () {
         var offset = iPhone && window.navigator.standalone ? 105 : 95;
-        console.log(`screen.availHeight=${screen.availHeight}, $(window).height()=${$(window).height()}`)
+        //console.log(`screen.availHeight=${screen.availHeight}, $(window).height()=${$(window).height()}`)
         $(".messages").height(Math.min(896, $(window).height() - offset));
     };
     const main = function () {
