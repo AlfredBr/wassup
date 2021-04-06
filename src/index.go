@@ -110,7 +110,7 @@ func uniquenessTest(w http.ResponseWriter, r *http.Request, userMessage UserMess
 	if cookie, err := r.Cookie("userMessage"); err == nil {
 		previousMessage := cookie.Value
 		unique := previousMessage != currentMessage
-		fmt.Printf("prev=%s\ncurr=%s\nuniq=%v\n", previousMessage, currentMessage, unique)
+		//fmt.Printf("prev=%s\ncurr=%s\nuniq=%v\n", previousMessage, currentMessage, unique)
 		return unique
 	}
 	return false
