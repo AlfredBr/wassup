@@ -138,17 +138,10 @@ app.get('/', (req, res) => {
     console.log(`root: ${req.cookies.userId}`);
 });
 app.post('/UserMessage', (req, res) => {
-    const userDate = (new Date()).getTime();
     const userMessage = getUserMessage(req, res);
     if (userMessage?.length > 0) {
-        if (!cooldownTest(req, res)) {
-            cooldownError(req, res);
-            return;
-        }        
-        if (!uniquenessTest(req, res)) {
-            uniquenessError(req, res);
-            return;
-        }
+        const userDate = (new Date()).getTime();
+        res.cookie("userDate", userDate);
         if (command(req, res, "/n")) {
             setCustomSymbol(req, res);            
             return;
@@ -166,9 +159,16 @@ app.post('/UserMessage', (req, res) => {
             res.send("");
             return;
         }        
+        if (!cooldownTest(req, res)) {
+            cooldownError(req, res);
+            return;
+        }        
+        if (!uniquenessTest(req, res)) {
+            uniquenessError(req, res);
+            return;
+        }
         const userId = getUserId(req, res);
         const userSymbol = getUserSymbol(req, res);        
-        res.cookie("userDate", userDate);
         res.cookie("userMessage", userMessage);
         const userMessageOut = {
             userId: userId,

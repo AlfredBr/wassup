@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,16 +70,15 @@ func getUserSymbol(userId string) string {
 	}
 	return symbol
 }
-func getUserMessage(w http.ResponseWriter, r *http.Request) string {
-	if r.Body == nil {
-		return ""
-	}
+func getUserMessage(w http.ResponseWriter, r *http.Request) (UserMessage, error) {
 	var userMessage UserMessage
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&userMessage); err != nil {
-		return ""
+	if r.Body != nil {
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&userMessage); err != nil {
+			return userMessage, errors.New("no message")
+		}
 	}
-	return userMessage.Message
+	return userMessage, nil
 }
 func setCookie(w http.ResponseWriter, r *http.Request, name string, value string) {
 	cookie := http.Cookie{
@@ -88,33 +89,37 @@ func setCookie(w http.ResponseWriter, r *http.Request, name string, value string
 	http.SetCookie(w, &cookie)
 }
 func cooldownTest(w http.ResponseWriter, r *http.Request) bool {
-	now := time.Now().Unix()
 	var then int64
+	now := time.Now().Unix()
 	if cookie, err := r.Cookie("userDate"); err == nil {
-		if then, err = strconv.ParseInt(cookie.Value, 10, 64); err != nil {
-			return false
+		if then, err = strconv.ParseInt(cookie.Value, 10, 64); err == nil {
+			cooldown := (now - then) >= 1
+			//fmt.Printf("now= %d\nthen=%d\n", now, then)
+			return cooldown
 		}
 	}
-	cooldown := (now - then) > 1
-	return cooldown
+	return false
 }
 func cooldownError(w http.ResponseWriter, r *http.Request) {
 	const errMsg = "403 forbidden: cooldown failed"
 	log.Println(errMsg)
 	http.Error(w, errMsg, http.StatusForbidden)
 }
-func uniquenessTest(w http.ResponseWriter, r *http.Request) bool {
-	userMessage := getUserMessage(w, r)
+func uniquenessTest(w http.ResponseWriter, r *http.Request, userMessage UserMessage) bool {
+	currentMessage := userMessage.Message
 	if cookie, err := r.Cookie("userMessage"); err == nil {
-		return cookie.Value != userMessage
+		previousMessage := cookie.Value
+		unique := previousMessage != currentMessage
+		fmt.Printf("prev=%s\ncurr=%s\nuniq=%v\n", previousMessage, currentMessage, unique)
+		return unique
 	}
 	return false
 }
-func uniquenessError(w http.ResponseWriter, r *http.Request) {
-	userMessage := getUserMessage(w, r)
+func uniquenessError(w http.ResponseWriter, r *http.Request, userMessage UserMessage) {
+	currentMessage := userMessage.Message
 	cookie, err := r.Cookie("userMessage")
 	if err == nil {
-		errMsg := fmt.Sprintf("403 forbidden: message not unique because '%s' = '%s'", cookie.Value, userMessage)
+		errMsg := fmt.Sprintf("403 forbidden: message not unique because '%s' = '%s'", cookie.Value, currentMessage)
 		log.Println(errMsg)
 		http.Error(w, errMsg, http.StatusForbidden)
 	}
@@ -129,25 +134,41 @@ func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userDate := fmt.Sprintf("%v", time.Now().Unix())
-	userMessage := getUserMessage(w, r)
-	if len(userMessage) > 0 {
+	userMessage, err := getUserMessage(w, r)
+	if err != nil {
+		return
+	}
+	if len(userMessage.Message) > 0 {
+		userDate := strconv.FormatInt(time.Now().Unix(), 10)
+		setCookie(w, r, "userDate", userDate)
+		if strings.HasPrefix(userMessage.Message, "/n") {
+			// todo: custom symbol command
+			return
+		}
+		if strings.HasPrefix(userMessage.Message, "/reset") {
+			// todo: reset command
+			return
+		}
+		if strings.HasPrefix(userMessage.Message, "/info") {
+			// todo: info command
+			return
+		}
+		if strings.HasPrefix(userMessage.Message, "/") {
+			// unknown command
+			return
+		}
 		if !cooldownTest(w, r) {
 			cooldownError(w, r)
 			return
 		}
-		if !uniquenessTest(w, r) {
-			uniquenessError(w, r)
+		if !uniquenessTest(w, r, userMessage) {
+			uniquenessError(w, r, userMessage)
 			return
 		}
-		// todo: clear command
-		// todo: custom symbol command
-		// todo: info command
 		userId := getUserId(w, r)
 		userSymbol := getUserSymbol(userId)
-		setCookie(w, r, "userDate", userDate)
-		setCookie(w, r, "userMessage", userMessage)
-		userMessageOut := UserMessage{userId, userMessage, userSymbol}
+		setCookie(w, r, "userMessage", userMessage.Message)
+		userMessageOut := UserMessage{userId, userMessage.Message, userSymbol}
 		fmt.Printf("/UserMessage: %+v\n", userMessageOut)
 		userMessages = append(userMessages, userMessageOut)
 		// todo: send broadcast message via websocket
@@ -180,7 +201,7 @@ func main() {
 	userSymbols = make(map[string]string)
 
 	portEnv := os.Getenv("PORT")
-	port, err := strconv.Atoi(portEnv)
+	port, err := strconv.ParseInt(portEnv, 10, 32)
 	if err != nil || port == 0 {
 		port = defaultPort
 	}
