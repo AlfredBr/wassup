@@ -193,6 +193,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func main() {
+	log.Println("--Golang/socket.io--")
 	http.HandleFunc("/", fileHandler("index.html"))
 	http.HandleFunc("/index.css", fileHandler("index.css"))
 	http.HandleFunc("/UserMessage", userMessageHandler)

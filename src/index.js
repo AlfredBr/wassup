@@ -27,7 +27,7 @@
 // $ npm install uuid --save
 
 "use strict"
-console.log("--JavaScript/Node/Express--");
+console.log("--JavaScript/Node/Express/socket.io--");
 const uuid = require('uuid');
 const port = process.env.PORT || 3000;
 const express = require('express');

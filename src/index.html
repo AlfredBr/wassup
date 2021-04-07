@@ -29,7 +29,7 @@
     integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous" type="text/javascript">
     </script>
 
-<!-- https://socket.io/docs/v3/client-initialization/ -->
+<!-- read this ==> https://socket.io/docs/v3/client-initialization/ -->
 <script src="https://cdn.socket.io/3.1.3/socket.io.min.js"
     integrity="sha384-cPwlPLvBTa3sKAgddT6krw0cJat7egBga3DJepJyrLl4Q9/5WLra3rrnMcyTyOnh" crossorigin="anonymous"
     type="text/javascript">
@@ -133,7 +133,7 @@
         $(".messages").height(Math.min(896, $(window).height() - offset));
     };
     const main = function () {
-        const title = "wassup.js";
+        const title = "wassup";
         $(".title").empty().append(title);
         ajaxPost();
         $("input").focus();
