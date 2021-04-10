@@ -5,26 +5,29 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"github.com/pkg/math"
 )
 
+// https://github.com/gofiber/fiber
+// https://yalantis.com/blog/how-to-build-websockets-in-go/
+// https://yalantis.com/blog/golang-vs-nodejs-comparison/
+
 // https://blog.golang.org/json
-// https://github.com/gorilla/websocket/blob/master/examples/chat/main.go // golang example
+// https://github.com/gorilla/websocket/blob/master/examples/chat/main.go
 // https://github.com/googollee/go-socket.io
 // https://scene-si.org/2017/09/27/things-to-know-about-http-in-go/
 // https://dev.to/bcanseco/request-body-encoding-json-x-www-form-urlencoded-ad9
 
 const maxMsgs = 8
-const defaultPort = 3000
-const oneMonth = 60 * 60 * 24 * 30
+const defaultPortNum = 3000
 
 var userSymbols map[string]string
 var symbolIndex = 0
@@ -36,28 +39,15 @@ type UserMessage struct {
 	Symbol  string `json:"symbol"`
 }
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
-func fileHandler(file string) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, file)
+func getUserId(ctx *fiber.Ctx) string {
+	var userMessage UserMessage
+	ctx.BodyParser(&userMessage)
+	userId := ctx.Cookies("userId")
+	if len(userId) > 0 {
+		return userId
 	}
-}
-func getUserId(w http.ResponseWriter, r *http.Request) string {
-	cookieIn, err := r.Cookie("userId")
-	if err == nil {
-		return cookieIn.Value
-	}
-	userId := uuid.New().String()
-	cookieOut := http.Cookie{
-		Name:   "userId",
-		Value:  userId,
-		MaxAge: oneMonth,
-	}
-	http.SetCookie(w, &cookieOut)
+	userId = uuid.New().String()
+	setCookie(ctx, "userId", userId)
 	return userId
 }
 func getUserSymbol(userId string) string {
@@ -70,29 +60,30 @@ func getUserSymbol(userId string) string {
 	}
 	return symbol
 }
-func getUserMessage(w http.ResponseWriter, r *http.Request) (UserMessage, error) {
+func getUserMessage(ctx *fiber.Ctx) (UserMessage, error) {
 	var userMessage UserMessage
-	if r.Body != nil {
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&userMessage); err != nil {
-			return userMessage, errors.New("no message")
-		}
+	err := ctx.BodyParser(&userMessage)
+	if err != nil {
+		errMsg := "error cannot parse"
+		ctx.Status(fiber.StatusBadRequest).SendString(errMsg)
+		return userMessage, errors.New(errMsg) // TODO: what is correct here?
+	}
+	if userMessage.Message == "" {
+		return userMessage, errors.New("no message")
 	}
 	return userMessage, nil
 }
-func setCookie(w http.ResponseWriter, r *http.Request, name string, value string) {
-	cookie := http.Cookie{
-		Name:   name,
-		Value:  value,
-		MaxAge: oneMonth,
-	}
-	http.SetCookie(w, &cookie)
+func setCookie(ctx *fiber.Ctx, name string, value string) {
+	cookie := new(fiber.Cookie)
+	cookie.Name = name
+	cookie.Value = value
+	cookie.Expires = time.Now().Add(24 * time.Hour)
+	ctx.Cookie(cookie)
 }
-func cooldownTest(w http.ResponseWriter, r *http.Request) bool {
-	var then int64
+func cooldownTest(ctx *fiber.Ctx) bool {
 	now := time.Now().Unix()
-	if cookie, err := r.Cookie("userDate"); err == nil {
-		if then, err = strconv.ParseInt(cookie.Value, 10, 64); err == nil {
+	if cookie := ctx.Cookies("userDate"); cookie != "" {
+		if then, err := strconv.ParseInt(cookie, 10, 64); err == nil {
 			cooldown := (now - then) >= 1
 			//fmt.Printf("now= %d\nthen=%d\n", now, then)
 			return cooldown
@@ -100,74 +91,75 @@ func cooldownTest(w http.ResponseWriter, r *http.Request) bool {
 	}
 	return false
 }
-func cooldownError(w http.ResponseWriter, r *http.Request) {
+func cooldownError(ctx *fiber.Ctx) {
 	const errMsg = "403 forbidden: cooldown failed"
 	log.Println(errMsg)
-	http.Error(w, errMsg, http.StatusForbidden)
+	ctx.Status(fiber.StatusForbidden).SendString(errMsg)
 }
-func uniquenessTest(w http.ResponseWriter, r *http.Request, userMessage UserMessage) bool {
+func uniquenessTest(ctx *fiber.Ctx, userMessage UserMessage) bool {
 	currentMessage := userMessage.Message
-	if cookie, err := r.Cookie("userMessage"); err == nil {
-		previousMessage := cookie.Value
+	if cookie := ctx.Cookies("userMessage"); cookie != "" {
+		previousMessage := cookie
 		unique := previousMessage != currentMessage
 		//fmt.Printf("prev=%s\ncurr=%s\nuniq=%v\n", previousMessage, currentMessage, unique)
 		return unique
 	}
 	return false
 }
-func uniquenessError(w http.ResponseWriter, r *http.Request, userMessage UserMessage) {
+func uniquenessError(ctx *fiber.Ctx, userMessage UserMessage) {
 	currentMessage := userMessage.Message
-	cookie, err := r.Cookie("userMessage")
-	if err == nil {
-		errMsg := fmt.Sprintf("403 forbidden: message not unique because '%s' = '%s'", cookie.Value, currentMessage)
+	previousMessage := ctx.Cookies("userMessage")
+	if previousMessage != "" {
+		errMsg := fmt.Sprintf("403 forbidden: message not unique because '%s' = '%s'", previousMessage, currentMessage)
 		log.Println(errMsg)
-		http.Error(w, errMsg, http.StatusForbidden)
+		ctx.Status(fiber.StatusForbidden).SendString(errMsg)
 	}
 }
-func userMessageHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "403 not suported", http.StatusForbidden)
-		return
+func userMessageHandler(ctx *fiber.Ctx) error {
+	ctx.Method()
+	if ctx.Method() != "POST" {
+		ctx.Status(fiber.StatusForbidden)
+		return errors.New("403 not suported")
 	}
-	if r.URL.Path != "/UserMessage" {
-		http.Error(w, "404 not found", http.StatusNotFound)
-		return
+	if ctx.Path() != "/UserMessage" {
+		ctx.Status(fiber.StatusNotFound)
+		return errors.New("404 not found")
 	}
 
-	userMessage, err := getUserMessage(w, r)
+	userMessage, err := getUserMessage(ctx)
 	if err != nil {
-		return
+		return err
 	}
 	if len(userMessage.Message) > 0 {
 		userDate := strconv.FormatInt(time.Now().Unix(), 10)
-		setCookie(w, r, "userDate", userDate)
+		setCookie(ctx, "userDate", userDate)
 		if strings.HasPrefix(userMessage.Message, "/n") {
 			// todo: custom symbol command
-			return
+			return nil
 		}
 		if strings.HasPrefix(userMessage.Message, "/reset") {
 			// todo: reset command
-			return
+			return nil
 		}
 		if strings.HasPrefix(userMessage.Message, "/info") {
 			// todo: info command
-			return
+			return nil
 		}
 		if strings.HasPrefix(userMessage.Message, "/") {
 			// unknown command
-			return
+			return nil
 		}
-		if !cooldownTest(w, r) {
-			cooldownError(w, r)
-			return
+		if !cooldownTest(ctx) {
+			cooldownError(ctx)
+			return nil
 		}
-		if !uniquenessTest(w, r, userMessage) {
-			uniquenessError(w, r, userMessage)
-			return
+		if !uniquenessTest(ctx, userMessage) {
+			uniquenessError(ctx, userMessage)
+			return nil
 		}
-		userId := getUserId(w, r)
+		userId := getUserId(ctx)
 		userSymbol := getUserSymbol(userId)
-		setCookie(w, r, "userMessage", userMessage.Message)
+		setCookie(ctx, "userMessage", userMessage.Message)
 		userMessageOut := UserMessage{userId, userMessage.Message, userSymbol}
 		fmt.Printf("/UserMessage: %+v\n", userMessageOut)
 		userMessages = append(userMessages, userMessageOut)
@@ -176,38 +168,31 @@ func userMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	userMessages = userMessages[math.Max(0, len(userMessages)-maxMsgs):]
 	if json, err := json.Marshal(userMessages); err == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(json)
+		ctx.Send(json)
 	}
+
+	return nil
 }
-func websocketHandler(w http.ResponseWriter, r *http.Request) {
-	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Fatal(err)
+func getPort() int {
+	portEnv := os.Getenv("PORT")
+	portNum, err := strconv.ParseInt(portEnv, 10, 32)
+	if err != nil || portNum == 0 {
+		portNum = defaultPortNum
 	}
-	fmt.Println("Client Connected")
-	err = ws.WriteMessage(1, []byte("broadcast"))
-	if err != nil {
-		log.Fatal(err)
-	}
+	return int(portNum)
 }
 func main() {
-	log.Println("--Golang/socket.io--")
-	http.HandleFunc("/", fileHandler("index.html"))
-	http.HandleFunc("/index.css", fileHandler("index.css"))
-	http.HandleFunc("/UserMessage", userMessageHandler)
-	http.HandleFunc("/ws", websocketHandler)
+	log.Println("--Golang/GoFiber--")
 
 	userSymbols = make(map[string]string)
 
-	portEnv := os.Getenv("PORT")
-	port, err := strconv.ParseInt(portEnv, 10, 32)
-	if err != nil || port == 0 {
-		port = defaultPort
-	}
-	addr := fmt.Sprintf(":%v", port)
+	app := fiber.New()
+	app.Use(logger.New())
+	app.Static("/", ".")
+	app.Post("/UserMessage", userMessageHandler)
+
+	addr := fmt.Sprintf(":%v", getPort())
 	url := fmt.Sprintf("http://localhost%s", addr)
 	log.Printf("listening: %s\n", url)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(app.Listen(addr))
 }
