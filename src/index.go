@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 	"github.com/pkg/math"
 )
@@ -28,6 +28,7 @@ import (
 
 const maxMsgs = 8
 const defaultPortNum = 3000
+const debugMode = true
 
 var userSymbols map[string]string
 var symbolIndex = 0
@@ -37,6 +38,12 @@ type UserMessage struct {
 	UserId  string `json:"userId"`
 	Message string `json:"message"`
 	Symbol  string `json:"symbol"`
+}
+
+func debug(val string) {
+	if debugMode {
+		fmt.Printf("%s", val)
+	}
 }
 
 func getUserId(ctx *fiber.Ctx) string {
@@ -69,7 +76,7 @@ func getUserMessage(ctx *fiber.Ctx) (UserMessage, error) {
 		return userMessage, errors.New(errMsg) // TODO: what is correct here?
 	}
 	if userMessage.Message == "" {
-		return userMessage, errors.New("no message")
+		return userMessage, nil // errors.New("no message")
 	}
 	return userMessage, nil
 }
@@ -85,7 +92,7 @@ func cooldownTest(ctx *fiber.Ctx) bool {
 	if cookie := ctx.Cookies("userDate"); cookie != "" {
 		if then, err := strconv.ParseInt(cookie, 10, 64); err == nil {
 			cooldown := (now - then) >= 1
-			//fmt.Printf("now= %d\nthen=%d\n", now, then)
+			//debug(fmt.Sprintf("now= %d\nthen=%d\n", now, then))
 			return cooldown
 		}
 	}
@@ -98,17 +105,16 @@ func cooldownError(ctx *fiber.Ctx) {
 }
 func uniquenessTest(ctx *fiber.Ctx, userMessage UserMessage) bool {
 	currentMessage := userMessage.Message
-	if cookie := ctx.Cookies("userMessage"); cookie != "" {
-		previousMessage := cookie
-		unique := previousMessage != currentMessage
-		//fmt.Printf("prev=%s\ncurr=%s\nuniq=%v\n", previousMessage, currentMessage, unique)
-		return unique
-	}
-	return false
+	previousMessage := ctx.Cookies("userMessage")
+	//debug(fmt.Sprintf("prev='%s'\ncurr='%s'\n", previousMessage, currentMessage))
+	unique := previousMessage != currentMessage
+	//debug(fmt.Sprintf("unique=%v\n", unique))
+	return unique
 }
 func uniquenessError(ctx *fiber.Ctx, userMessage UserMessage) {
 	currentMessage := userMessage.Message
 	previousMessage := ctx.Cookies("userMessage")
+	//debug(fmt.Sprintf("currentMessage= '%v'\npreviousMessage='%v'\n", currentMessage, previousMessage))
 	if previousMessage != "" {
 		errMsg := fmt.Sprintf("403 forbidden: message not unique because '%s' = '%s'", previousMessage, currentMessage)
 		log.Println(errMsg)
@@ -116,7 +122,6 @@ func uniquenessError(ctx *fiber.Ctx, userMessage UserMessage) {
 	}
 }
 func userMessageHandler(ctx *fiber.Ctx) error {
-	ctx.Method()
 	if ctx.Method() != "POST" {
 		ctx.Status(fiber.StatusForbidden)
 		return errors.New("403 not suported")
@@ -164,12 +169,12 @@ func userMessageHandler(ctx *fiber.Ctx) error {
 		fmt.Printf("/UserMessage: %+v\n", userMessageOut)
 		userMessages = append(userMessages, userMessageOut)
 		// todo: send broadcast message via websocket
+		//writer, _ := tws.NextWriter(websocket.TextMessage)
+		//writer.Write([]byte("ABC"))
 	}
 
 	userMessages = userMessages[math.Max(0, len(userMessages)-maxMsgs):]
-	if json, err := json.Marshal(userMessages); err == nil {
-		ctx.Send(json)
-	}
+	ctx.Status(fiber.StatusOK).JSON(userMessages)
 
 	return nil
 }
@@ -181,15 +186,61 @@ func getPort() int {
 	}
 	return int(portNum)
 }
+
+var tws *websocket.Conn
+
 func main() {
-	log.Println("--Golang/GoFiber--")
+	log.Println("--GoLang/GoFiber--")
 
 	userSymbols = make(map[string]string)
 
 	app := fiber.New()
+
+	app.Use("/ws", func(c *fiber.Ctx) error {
+		// IsWebSocketUpgrade returns true if the client
+		// requested upgrade to the WebSocket protocol.
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
 	app.Use(logger.New())
 	app.Static("/", ".")
 	app.Post("/UserMessage", userMessageHandler)
+	app.Get("/ws", websocket.New(func(ws *websocket.Conn) {
+		tws = ws
+		log.Println(ws.Locals("allowed")) // true
+	}))
+
+	app.Get("/zzws", websocket.New(func(c *websocket.Conn) {
+		// c.Locals is added to the *websocket.Conn
+		log.Println(c.Locals("allowed"))  // true
+		log.Println(c.Params("id"))       // 123
+		log.Println(c.Query("v"))         // 1.0
+		log.Println(c.Cookies("session")) // ""
+
+		// websocket.Conn bindings
+		// https://pkg.go.dev/github.com/fasthttp/websocket?tab=doc#pkg-index
+		var (
+			mt  int
+			msg []byte
+			err error
+		)
+		for {
+			if mt, msg, err = c.ReadMessage(); err != nil {
+				log.Println("read:", err)
+				break
+			}
+			log.Printf("recv: %s", msg)
+
+			if err = c.WriteMessage(mt, msg); err != nil {
+				log.Println("write:", err)
+				break
+			}
+		}
+	}))
 
 	addr := fmt.Sprintf(":%v", getPort())
 	url := fmt.Sprintf("http://localhost%s", addr)

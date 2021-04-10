@@ -36,7 +36,8 @@
 
 <script type="text/javascript">
     "use strict";
-    const socket = io();
+    //const socket = io();
+    const ws = new WebSocket("ws://localhost:3000/ws");
     const getCookie = function (cname) {
         var name = cname + "=";
         var decodedCookie = decodeURIComponent(document.cookie);
@@ -71,8 +72,8 @@
             data: JSON.stringify({ "userId": userId, "message": text }),
             success: function (response) {
                 if (update) {
-                    //console.log(document.cookie);
-                    //console.log(JSON.stringify(response, null, " "));
+                    console.log(document.cookie);
+                    console.log(JSON.stringify(response, null, " "));
                     if ($(".messages").children().length === 0) {
                         response?.forEach((item) => {
                             writeLine(item);
@@ -108,7 +109,7 @@
     const win32 = /^(Win32)/.test(navigator.platform);
     const sendMessage = function (e) {
         const enterKey = 13;
-        const userInput = $("input").val();
+        const userInput = $.trim($("input").val());
         if (userInput.length > 0) {
             if (e.keyCode === enterKey) {
                 console.log(`keydown: Enter, user-input: '${userInput}'`);
@@ -138,7 +139,7 @@
         $("input").focus();
         clientResize();
     };
-    socket.on("broadcast", () => { ajaxPost(); });
+    //socket.on("broadcast", () => { ajaxPost(); });
     $("button").click(sendMessage);
     $("button").addClass(win32 ? "lifted" : "");
     $("main").addClass(win32 ? "win32" : "");
