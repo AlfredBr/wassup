@@ -36,8 +36,8 @@
 
 <script type="text/javascript">
     "use strict";
-    //const socket = io();
-    const ws = new WebSocket("ws://localhost:3000/ws");
+    const socket = io();
+    const ws = new WebSocket("ws://" + location.host + "/ws");
     const getCookie = function (cname) {
         var name = cname + "=";
         var decodedCookie = decodeURIComponent(document.cookie);
@@ -139,7 +139,7 @@
         $("input").focus();
         clientResize();
     };
-    //socket.on("broadcast", () => { ajaxPost(); });
+    socket.on("broadcast", () => { ajaxPost(); });
     $("button").click(sendMessage);
     $("button").addClass(win32 ? "lifted" : "");
     $("main").addClass(win32 ? "win32" : "");

@@ -121,6 +121,10 @@ func uniquenessError(ctx *fiber.Ctx, userMessage UserMessage) {
 		ctx.Status(fiber.StatusForbidden).SendString(errMsg)
 	}
 }
+func nullHandler(ctx *fiber.Ctx) error {
+	ctx.Status(fiber.StatusOK)
+	return nil
+}
 func userMessageHandler(ctx *fiber.Ctx) error {
 	if ctx.Method() != "POST" {
 		ctx.Status(fiber.StatusForbidden)
@@ -205,10 +209,20 @@ func main() {
 		}
 		return fiber.ErrUpgradeRequired
 	})
+	app.Use("/socket.io/", func(c *fiber.Ctx) error {
+		// IsWebSocketUpgrade returns true if the client
+		// requested upgrade to the WebSocket protocol.
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
 
 	app.Use(logger.New())
 	app.Static("/", ".")
 	app.Post("/UserMessage", userMessageHandler)
+	app.Get("/socket.io/", nullHandler)
 	app.Get("/ws", websocket.New(func(ws *websocket.Conn) {
 		tws = ws
 		log.Println(ws.Locals("allowed")) // true
